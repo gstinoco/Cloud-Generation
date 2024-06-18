@@ -237,7 +237,7 @@ def Randomize(p, me):
         r = 0.01
     
     ## Randomly move the nodes.
-    for i in range(0, m, 2):
+    for i in range(0, m):
         if p[i, 2] == 0:
             inside_poly = False
             while not inside_poly:
