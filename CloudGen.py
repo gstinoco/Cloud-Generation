@@ -20,8 +20,12 @@ import os
 import dmsh
 import random
 import numpy as np
+import pandas as pd
+import calfem.mesh as cfm
+import calfem.geometry as cfg
 import matplotlib.pyplot as plt
 from shapely.geometry import Point, Polygon, MultiPoint
+plt.rcParams.update({'font.size': 26})
 
 def CreateCloud(xb, yb, num):
     '''
@@ -63,6 +67,55 @@ def CreateCloud(xb, yb, num):
 
     # Add a third column to X and mark boundary nodes as 1
     X = np.column_stack((X, 1 - inside_poly.astype(int)))                           # Add a column to X to mark boundary nodes.
+
+    return X, cells
+
+def CreateCloud_2(xb, yb, num):
+    '''
+    This function generates a cloud of points within a specified boundary defined by the (xb, yb) coordinates.
+    It calculates the maximum distance between boundary nodes and uses it to determine node spacing.
+    The resulting point cloud contains nodes within the boundary, with boundary nodes marked as 1 in the third column of X.
+
+    Parameters:
+        xb          ndarray         Array of x-coordinates of boundary nodes.
+        yb          ndarray         Array of y-coordinates of boundary nodes.
+        num         int             Number of desired nodes in the cloud.
+
+    Returns:
+        X           ndarray         Array with the coordinates of the cloud of points with boundary node markings.
+        cells       ndarray         Array representing the mesh cells generated.
+    
+    Example:
+        xb       = np.array([0.0, 1.0, 1.0, 0.0])
+        yb       = np.array([0.0, 0.0, 1.0, 1.0])
+        num      = 100
+        X, cells = CreateCloud(xb, yb, num)
+    '''
+
+    # Find the maximum distance between the boundary nodes.
+    dist  = np.max(np.sqrt(np.diff(xb.T)**2 + np.diff(yb.T)**2))                    # Calculate the distance between nodes based on the maximum distance.
+    dist /= num                                                                     # Calculate the distance between nodes based on the maximum distance.
+
+    # Create Calfem geometry
+    geometry = cfg.GeometryData()
+    for i in range(len(xb)):
+        geometry.point(xb[i], yb[i])
+
+    geometry.add_region("Outside", [i + 1 for i in range(len(xb))])
+
+    # Create the Triangulation
+    mesh = cfm.GmshMesh(geometry)
+    mesh.el_type = 2
+    mesh.dofs_per_node = 1
+    mesh.el_size_factor = dist
+    mesh.create_mesh()
+
+    X = mesh.nodes[:, 0:2]
+    cells = mesh.elements
+
+    # Mark boundary nodes as 1 in the third column of X
+    boundary_indices = [i for i in range(len(xb))]
+    X[:, 2] = np.isin(np.arange(1, len(X) + 1), boundary_indices).astype(int)
 
     return X, cells
 
@@ -129,7 +182,7 @@ def CreateCloud_Holes(xb, yb, num, h_coor):
 
     return X, cells
 
-def GraphCloud(p, save = False, nom = '', show = True):
+def GraphCloud(p, save = False, folder = '', nom = '', show = True):
     """
     This function creates a scatter plot of a cloud of points where points are colored based on the position in the cloud:
     Blue markers are used for inner points, and red markers for boundary points.
@@ -153,8 +206,8 @@ def GraphCloud(p, save = False, nom = '', show = True):
 
     # Parameter initialization
     if save:
-        nomp = nom + '.png'                                                         # Define the file name for the saved plot.
-        nome = nom + '.eps'                                                         # Define the file name for the saved plot.
+        nomp = folder + nom + '.png'                                                # Define the file name for the saved plot.
+        nome = folder + nom + '.eps'                                                # Define the file name for the saved plot.
     else:
         show = True
 
@@ -202,7 +255,7 @@ def GridToCloud(x, y, holes = False, num = 1, h_coor = [(0.5, 0.7, 0.05)]):
     """
 
     # Scale the region to fit in [0, 1] x [0, 1]
-    scale = max(x.max(),y.max())                                                    # Find the bigger coordinate.
+    scale = max(x.max(), y.max()) - min(x.min(), y.min())                           # Find the bigger coordinate.
     x     = (x - x.min())/scale                                                     # Scale x-coordinates.
     y     = (y - y.min())/scale                                                     # Scale y-coordinates.
 
@@ -371,7 +424,7 @@ def CalculateNormals(p, node_type):
     # Rotation Matrix.
     rota = np.array([[0, 1], [-1, 0]]) if a > 0 else np.array([[0, -1], [1, 0]])    # Determine the rotation matrix.
 
-    # Vectores for adjacent boundary nodes.
+    # Vectors for adjacent boundary nodes.
     for i in range(nb - 1):
         v = np.roll(pb[:, 0:2], shift=-1, axis=0) - np.roll(pb[:, 0:2], shift=1, axis=0)
         nor[i, :] = np.dot(rota, v[i, :]) / np.linalg.norm(np.dot(rota, v[i, :]))   # Calculate vectors 'v' between adjacent boundary nodes.
@@ -423,29 +476,3 @@ def GraphNormals(pb, vecs, nom, show, holes):
     plt.savefig(nomp)                                                               # Save the plot as a PNG file.
     plt.savefig(nome, format='eps', bbox_inches='tight')                            # Save the plot as a EPS file.
     plt.close()                                                                     # Close the plot to release resources.
-
-def GraphMesh(x, y, me, nom):
-    """
-    This function creates a graphic of the selected mesh.
-    The plot is saved as a PNG file with the specified name.
-
-    Parameters:
-        x           ndarray         Array of x-coordinates of grid points.
-        y           ndarray         Array of y-coordinates of grid points.
-        me          int             Number of grid nodes in the cloud.
-                                    1: 21
-                                    2: 41
-                                    3: 81
-        nom         str             Name for the generated plot and file.
-
-    Returns:
-        None
-    """
-
-    nomm = 'Meshes/' + me + '/' + nom + '.png'
-    plt.rcParams["figure.figsize"] = (12,12)
-    plt.plot(x, y, c = 'black')
-    plt.plot(x.T, y.T, c = 'black')
-    plt.title(nom + '_' + me + ' Mesh')
-    plt.savefig(nomm)
-    plt.close()
