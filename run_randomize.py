@@ -1,8 +1,7 @@
-from scipy.io import loadmat
-from scipy.io import savemat
 import os
 import glob
 import CloudGen
+import pandas as pd
 
 def run_randomize(Holes):
     # Variable Initialization.
@@ -14,19 +13,16 @@ def run_randomize(Holes):
             folder = 'Holes/' + me + '/'
         else:
             folder = 'Clouds/' + me + '/'
-        regions = glob.glob(folder + '*.mat')
-        regions = sorted([os.path.splitext(os.path.basename(region))[0] for region in regions])
+        regions = glob.glob(folder + '*_p.csv')
+        regions = sorted([os.path.splitext(os.path.basename(region))[0].replace('_p', '') for region in regions])
 
         for reg in regions:
-            # Load data from the file.
-            mat  = loadmat(folder + reg + '.mat')
-            
-            mesh = str(me)
-            print('Trabajando en la malla ' + reg + '_' + mesh + '.')
+            # Load data from the files.
+            p = pd.read_csv(folder + reg + '_p.csv').values
+            tt = pd.read_csv(folder + reg + '_tt.csv').values
 
-            # Get the grid nodes
-            p = mat['p']
-            tt = mat['tt']
+            mesh = str(me)
+            print(f'Working on {reg}_{mesh}.')
 
             if Holes:
                 folder2 = 'Holes_rand/' + me + '/'
@@ -36,17 +32,14 @@ def run_randomize(Holes):
             if not os.path.exists(folder2):
                 os.makedirs(folder2)
 
-            nom = folder2 + reg
-
             # Generate the Cloud
             p = CloudGen.Randomize(p, me)
 
-            CloudGen.GraphCloud(p, save = True, nom = nom, show = False)
+            CloudGen.GraphCloud(p, save = True, folder = folder2, nom = reg, show = False)
 
             # Save the information of the Cloud.
-            nom = nom + '.mat'
-            mdic = {"p": p, "tt": tt}
-            savemat(nom, mdic)
+            pd.DataFrame(p).to_csv(f'{folder2}{reg}_p.csv', index = False, header = False)
+            pd.DataFrame(tt).to_csv(f'{folder2}{reg}_tt.csv', index = False, header = False)
 
 config = [(True), (False)]
 
